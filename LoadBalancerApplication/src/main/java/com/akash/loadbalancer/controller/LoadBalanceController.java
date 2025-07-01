@@ -12,8 +12,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestTemplate;
 
 import com.akash.loadbalancer.service.LoadBalancerRoundRobinService;
+import com.akash.loadbalancer.service.LoadBalancerStickyService;
 import com.akash.loadbalancer.service.LoadBalancerWeightedService;
 
 @RestController
@@ -22,42 +24,42 @@ public class LoadBalanceController {
 	private LoadBalancerRoundRobinService loadBalancerRoundRobinService;
 	@Autowired
 	private LoadBalancerWeightedService loadBalancerWeightedService;
+	@Autowired
+	private LoadBalancerStickyService stickyService;
+	@Autowired
+	private RestTemplate restTemplate;
+
 	
 	@GetMapping("/redirect")
 	public ResponseEntity<String> redirectRequest(@RequestParam String clientId,
 												  @RequestParam(defaultValue = "roundrobin") String strategy) throws IOException {
 		
-		String serverUrl;
-		if("weighted".equalsIgnoreCase(strategy)) {
-			serverUrl = loadBalancerWeightedService.getServer(clientId);
-		} else {
-			serverUrl = loadBalancerRoundRobinService.getServer(clientId);
-		}
+		String targetUrl = null;
+
+	    switch (strategy.toLowerCase()) {
+	        case "roundrobin":
+	            targetUrl = loadBalancerRoundRobinService.getServer(clientId);
+	            break;
+	        case "weighted":
+	            targetUrl = loadBalancerWeightedService.getServer(clientId);
+	            break;
+	        case "sticky":
+	            targetUrl = stickyService.getServer(clientId);
+	            break;
+	        default:
+	            return ResponseEntity.badRequest().body("Invalid strategy provided.");
+	    }
 		
-		if(serverUrl == null) {
-			return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body("No Available servers");
-		}
-		
-		try {
-			URL url = new URL(serverUrl + "/handle");
-			HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-			connection.setRequestMethod("GET");
-			connection.setConnectTimeout(1000);
-			
-			BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-			StringBuilder response = new StringBuilder();
-			String line;
-			
-			while((line = reader.readLine()) != null) {
-				response.append(line);
-			}
-			reader.close();
-			
-			return ResponseEntity.ok(response.toString());
-		} catch (Exception e) {
-			// TODO: handle exception
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Server call failed");
-		}
+	    if (targetUrl == null) {
+	        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body("No servers available");
+	    }
+
+	    try {
+	        String response = restTemplate.getForObject(targetUrl + "/handle", String.class);
+	        return ResponseEntity.ok(response);
+	    } catch (Exception e) {
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error forwarding to backend: " + e.getMessage());
+	    }
 	}
 
 }
