@@ -4,8 +4,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import com.akash.loadbalancer.model.ServerInstance;
 import com.akash.loadbalancer.repository.ServerRepository;
@@ -14,51 +19,56 @@ import com.akash.loadbalancer.repository.ServerRepository;
 public class LoadBalancerRoundRobinService {
 
 	private final ServerRepository serverRepository;
-	private final Map<String, Integer> requestCounter = new HashMap<>();
-	private int serverIndex = 0;
-	private static final int MAX_REQUESTS_PER_SERVER = 5;
+    private final AtomicInteger currentIndex = new AtomicInteger(0);
+    private final AtomicInteger requestCounter = new AtomicInteger(0);
+    private final int MAX_REQUESTS_PER_SERVER = 5;
 
-	public LoadBalancerRoundRobinService(ServerRepository serverRepository) {
-		this.serverRepository = serverRepository;
-	}
+    @Autowired
+    private CacheManager cacheManager;
 
-	public synchronized String getServer(String key) {
-		List<ServerInstance> allServers = serverRepository.findAll();
-		List<ServerInstance> liveServers = new ArrayList<>();
+    public LoadBalancerRoundRobinService(ServerRepository serverRepository) {
+        this.serverRepository = serverRepository;
+    }
 
-		for (ServerInstance server : allServers) {
-			if (server.isAlive()) {
-				liveServers.add(server);
-			}
-		}
+    @Cacheable("aliveServers")
+    public List<ServerInstance> getAliveServers() {
+        return serverRepository.findByIsAliveTrue();
+    }
 
-		if (liveServers.isEmpty()) {
-			return null;
-		}
-
-		// Ensure serverIndex is in bounds after filtering
-        if (serverIndex >= liveServers.size()) {
-            serverIndex = 0;
+    public synchronized String getServer() {
+        List<ServerInstance> servers = getAliveServers();
+        if (servers == null || servers.isEmpty()) {
+            return null;
+        }
+        
+        // Adjust currentIndex if it's out of bounds
+        if (currentIndex.get() >= servers.size()) {
+            currentIndex.set(0);
+            requestCounter.set(0);
         }
 
-        // Skip dead server if it became unhealthy between checks
-        ServerInstance currentServer = liveServers.get(serverIndex);
-        if (!currentServer.isAlive()) {
-            serverIndex = (serverIndex + 1) % liveServers.size();
-            requestCounter.clear();
-            currentServer = liveServers.get(serverIndex);
+        int index = currentIndex.get();
+        int counter = requestCounter.incrementAndGet();
+
+        if (counter > MAX_REQUESTS_PER_SERVER) {
+            index = (index + 1) % servers.size();
+            currentIndex.set(index);
+            requestCounter.set(1);
         }
 
-        String currentKey = "server-" + serverIndex;
-        int count = requestCounter.getOrDefault(currentKey, 0);
-
-        if (count >= MAX_REQUESTS_PER_SERVER) {
-            serverIndex = (serverIndex + 1) % liveServers.size();
-            currentKey = "server-" + serverIndex;
-            count = 0;
+        String selectedUrl = servers.get(index).getUrl();
+        try {
+            new RestTemplate().getForObject(selectedUrl + "/handle", String.class);
+            return selectedUrl;
+        } catch (Exception e) {
+            serverRepository.findById(selectedUrl).ifPresent(s -> {
+                if (s.isAlive()) {
+                    s.setAlive(false);
+                    serverRepository.save(s);
+                    cacheManager.getCache("aliveServers").clear();
+                }
+            });
+            return getServer();
         }
-
-        requestCounter.put(currentKey, count + 1);
-        return liveServers.get(serverIndex).getUrl();
-	}
+    }
 }

@@ -38,10 +38,10 @@ public class LoadBalanceController {
 
 	    switch (strategy.toLowerCase()) {
 	        case "roundrobin":
-	            targetUrl = loadBalancerRoundRobinService.getServer(clientId);
+	            targetUrl = loadBalancerRoundRobinService.getServer();
 	            break;
 	        case "weighted":
-	            targetUrl = loadBalancerWeightedService.getServer(clientId);
+	            targetUrl = loadBalancerWeightedService.getServer();
 	            break;
 	        case "sticky":
 	            targetUrl = stickyService.getServer(clientId);

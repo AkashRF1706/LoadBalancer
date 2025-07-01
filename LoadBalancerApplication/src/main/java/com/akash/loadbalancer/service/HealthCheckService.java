@@ -5,42 +5,48 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.CacheManager;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import com.akash.loadbalancer.repository.ServerRepository;
 import com.akash.loadbalancer.model.ServerInstance;
 
 @Service
 public class HealthCheckService {
-	private final ServerRepository serverRepository;
+	@Autowired
+    private ServerRepository serverRepository;
 
-	public HealthCheckService(ServerRepository serverRepository) {
-		this.serverRepository = serverRepository;
-	}
+    @Autowired
+    private CacheManager cacheManager;
 
-	@Scheduled(fixedRate = 5000)
-	public void checkServers() {
-		List<ServerInstance> servers = serverRepository.findAll();
+    private final RestTemplate restTemplate = new RestTemplate();
 
-		for (ServerInstance server : servers) {
-            boolean previouslyAlive = server.isAlive();
-            boolean currentlyAlive = false;
+    @Scheduled(fixedRate = 5000)
+    public void performHealthCheck() {
+        List<ServerInstance> servers = serverRepository.findAll();
+        boolean statusChanged = false;
+
+        for (ServerInstance server : servers) {
             try {
-                URL url = new URL(server.getUrl() + "/handle");
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("GET");
-                conn.setConnectTimeout(1000);
-                conn.connect();
-                currentlyAlive = conn.getResponseCode() == 200;
-            } catch (IOException e) {
-                currentlyAlive = false;
-            }
-
-            if (previouslyAlive != currentlyAlive) {
-                server.setAlive(currentlyAlive);
-                serverRepository.save(server);
+                restTemplate.getForObject(server.getUrl() + "/handle", String.class);
+                if (!server.isAlive()) {
+                    server.setAlive(true);
+                    statusChanged = true;
+                }
+            } catch (Exception e) {
+                if (server.isAlive()) {
+                    server.setAlive(false);
+                    statusChanged = true;
+                }
             }
         }
-	}
+
+        if (statusChanged) {
+            serverRepository.saveAll(servers);
+            cacheManager.getCache("aliveServers").clear();
+        }
+    }
 }

@@ -2,54 +2,58 @@ package com.akash.loadbalancer.service;
 
 import com.akash.loadbalancer.model.ServerInstance;
 import com.akash.loadbalancer.repository.ServerRepository;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
 
 @Service
 public class LoadBalancerStickyService {
 
-    private final ServerRepository serverRepository;
+	private final ServerRepository serverRepository;
     private final Map<String, String> clientMap = new HashMap<>();
-    private int index = 0;
+
+    @Autowired
+    private CacheManager cacheManager;
 
     public LoadBalancerStickyService(ServerRepository serverRepository) {
         this.serverRepository = serverRepository;
     }
 
-    public synchronized String getServer(String clientId) {
-        List<ServerInstance> servers = serverRepository.findAll();
-        List<ServerInstance> aliveServers = new ArrayList<>();
+    @Cacheable("aliveServers")
+    public List<ServerInstance> getAliveServers() {
+        return serverRepository.findByIsAliveTrue();
+    }
 
-        for (ServerInstance server : servers) {
-            if (server.isAlive()) {
-                aliveServers.add(server);
+    public synchronized String getServer(String clientId) {
+        if (clientMap.containsKey(clientId)) {
+            String mappedServer = clientMap.get(clientId);
+            try {
+                new RestTemplate().getForObject(mappedServer + "/handle", String.class);
+                return mappedServer;
+            } catch (Exception e) {
+                serverRepository.findById(mappedServer).ifPresent(s -> {
+                    if (s.isAlive()) {
+                        s.setAlive(false);
+                        serverRepository.save(s);
+                        cacheManager.getCache("aliveServers").clear();
+                    }
+                });
+                clientMap.remove(clientId);
             }
         }
 
-        if (aliveServers.isEmpty()) {
+        List<ServerInstance> servers = getAliveServers();
+        if (servers.isEmpty()) {
             return null;
         }
 
-        // if clientId is already mapped and server is alive, return it
-        if (clientMap.containsKey(clientId)) {
-            String assignedUrl = clientMap.get(clientId);
-            for (ServerInstance server : aliveServers) {
-                if (server.getUrl().equals(assignedUrl)) {
-                    return assignedUrl;
-                }
-            }
-        }
-
-        // assign a new server (round robin)
-        if (index >= aliveServers.size()) {
-            index = 0;
-        }
-
-        String selectedUrl = aliveServers.get(index).getUrl();
-        clientMap.put(clientId, selectedUrl);
-        index++;
-
-        return selectedUrl;
+        String selected = servers.get(clientId.hashCode() % servers.size()).getUrl();
+        clientMap.put(clientId, selected);
+        return selected;
     }
 }
