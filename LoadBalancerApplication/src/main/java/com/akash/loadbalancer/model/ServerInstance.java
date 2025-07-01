@@ -10,18 +10,25 @@ public class ServerInstance {
 	@Id
 	private String url;
 	private boolean isAlive;
+	private int weight;
 
 	public ServerInstance() {
-		
+
 	}
 
-	public ServerInstance(String url) {
+	public ServerInstance(String url, boolean isAlive, int weight) {
+		super();
 		this.url = url;
-		this.isAlive = true;
+		this.isAlive = isAlive;
+		this.weight = weight;
 	}
 
 	public String getUrl() {
 		return url;
+	}
+
+	public void setUrl(String url) {
+		this.url = url;
 	}
 
 	public boolean isAlive() {
@@ -30,6 +37,14 @@ public class ServerInstance {
 
 	public void setAlive(boolean isAlive) {
 		this.isAlive = isAlive;
+	}
+
+	public int getWeight() {
+		return weight;
+	}
+
+	public void setWeight(int weight) {
+		this.weight = weight;
 	}
 
 }

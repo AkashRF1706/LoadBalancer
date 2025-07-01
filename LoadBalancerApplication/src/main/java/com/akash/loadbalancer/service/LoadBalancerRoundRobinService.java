@@ -11,14 +11,14 @@ import com.akash.loadbalancer.model.ServerInstance;
 import com.akash.loadbalancer.repository.ServerRepository;
 
 @Service
-public class LoadBalancerService {
+public class LoadBalancerRoundRobinService {
 
 	private final ServerRepository serverRepository;
 	private final Map<String, Integer> requestCounter = new HashMap<>();
 	private int serverIndex = 0;
 	private static final int MAX_REQUESTS_PER_SERVER = 5;
 
-	public LoadBalancerService(ServerRepository serverRepository) {
+	public LoadBalancerRoundRobinService(ServerRepository serverRepository) {
 		this.serverRepository = serverRepository;
 	}
 
