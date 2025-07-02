@@ -1,0 +1,24 @@
+.server-card {
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  background-color: #fff;
+}
+
+.server-card.alive {
+  border-left: 6px solid #10b981;
+}
+
+.server-card.dead {
+  border-left: 6px solid #ef4444;
+}
+
+.server-card h3 {
+  margin: 0 0 10px 0;
+  font-size: 1.2rem;
+}
+
+.server-card p {
+  margin: 4px 0;
+  font-size: 0.95rem;
+}
