@@ -1,5 +1,7 @@
 package com.akash.loadbalancer.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
@@ -9,6 +11,7 @@ import jakarta.persistence.Table;
 public class ServerInstance {
 	@Id
 	private String url;
+	@JsonProperty("isAlive")
 	private boolean isAlive;
 	private int weight;
 

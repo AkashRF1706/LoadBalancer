@@ -6,14 +6,20 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Optional;
 
 @RestController
 @RequestMapping("/servers")
-public class ServerRegistrationController {
+public class ServerController {
 
     @Autowired
     private ServerRepository serverRepository;
+    
+    @GetMapping
+    public List<ServerInstance> getAllServers() {
+        return serverRepository.findAll();
+    }
 
     @PostMapping("/register")
     public ResponseEntity<String> registerServer(@RequestBody ServerInstance newServer) {

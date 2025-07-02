@@ -1,10 +1,6 @@
 package com.akash.loadbalancer.controller;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -61,5 +57,4 @@ public class LoadBalanceController {
 	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error forwarding to backend: " + e.getMessage());
 	    }
 	}
-
 }
